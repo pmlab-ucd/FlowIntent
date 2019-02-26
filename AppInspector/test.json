@@ -1,0 +1,34 @@
+{
+    "appname": "建材创新",
+    "dir": "C:/Users/hao/Documents/Ground/0/5/cn.apps123.shell.jiancaichuangxin",
+    "doc": [
+        "topic_map",
+        "建材创新",
+        [
+            "关于我们",
+            "新闻资讯",
+            "商家服务",
+            "供求商机",
+            "建筑服务",
+            "会员中心",
+            "在线商城",
+            "二维码分享",
+            "更多"
+        ]
+    ],
+    "html": "C:/Users/hao/Documents/Ground/0/5/cn.apps123.shell.jiancaichuangxin\\7627719.html",
+    "id": "cn.apps123.shell.jiancaichuangxin",
+    "topic": "topic_map",
+    "ui_doc": [
+        "关于我们",
+        "新闻资讯",
+        "商家服务",
+        "供求商机",
+        "建筑服务",
+        "会员中心",
+        "在线商城",
+        "二维码分享",
+        "更多"
+    ],
+    "xml": "C:/Users/hao/Documents/Ground/0/5/cn.apps123.shell.jiancaichuangxin\\0713-02-52-22hierarchy.xml"
+}
