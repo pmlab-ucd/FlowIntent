@@ -74,3 +74,8 @@ def proto(protocol, dest_port):
             return 3
     elif protocol == 17:
         return 4
+
+
+def jaccard(a: set, b: set):
+    c = a.intersection(b)
+    return float(len(c)) / (len(a) + len(b) - len(c))

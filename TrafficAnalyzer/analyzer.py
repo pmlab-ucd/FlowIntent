@@ -16,6 +16,10 @@ from sklearn.model_selection import GridSearchCV
 import pickle
 from urllib.parse import urlparse
 import re
+from sklearn.cluster import MeanShift
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
+from os_urlpattern.formatter import pformat
+from os_urlpattern.pattern_maker import PatternMaker
 
 logger = set_logger('Analyzer', 'INFO')
 
@@ -26,7 +30,7 @@ class Analyzer:
     # then transfer the description out.
     map_sdk_urls = ['map.baidu.com', 'amap.com', 'maps.googleapis.com']
     numeric_features = ['frame_num', 'up_count', 'non_http_num', 'len_stat', 'epoch_stat',
-                       'up_stat', 'down_stat']
+                        'up_stat', 'down_stat']
 
     @staticmethod
     def filter_url_words(url: str):
@@ -273,8 +277,9 @@ class Analyzer:
         outliers_fraction = 0.27
         anomaly_algorithms = [
             # ("Robust covariance", EllipticEnvelope(contamination=outliers_fraction)),
-            ("One-Class SVM", svm.OneClassSVM(nu=outliers_fraction, kernel="rbf",
-                                              gamma=1e-09)),
+            # ("One-Class SVM", svm.OneClassSVM(nu=outliers_fraction, kernel="rbf",
+            # gamma=1e-09)),
+            ("MeanShift", MeanShift()),
             # ("Isolation Forest", IsolationForest(behaviour='new',
             #                                      contamination=outliers_fraction,
             #                                      random_state=42)),
@@ -296,20 +301,24 @@ class Analyzer:
                 X_test = np.row_stack([X_test.toarray(), X_neg.toarray()])
                 y_neg = -1 * np.ones(X_neg.shape[0])
                 y_test = np.concatenate((y_test, y_neg), axis=0)
-                # y_train_true = real_pos[train_index]
-                grid = {'gamma': np.logspace(-9, 3, 13),
-                        'nu': np.linspace(0.01, 0.99, 99)}
-                search = GridSearchCV(algorithm, grid, iid=False, cv=5,
-                                      return_train_score=False, scoring='accuracy')
-                search.fit(X_train, y_train)
-                logger.debug("Best parameter (CV score=%0.3f):" % search.best_score_)
-                logger.debug(search.best_params_)
-                # train the classifier
-                # TODO nu should be determined by the context classification results:
-                #  the percentage of neg flows appeared under pos contexts.
-                # algorithm.fit(X_train.toarray())
-                # make the predictions
-                algorithm = search
+                if isinstance(algorithm, svm.OneClassSVM):
+                    # y_train_true = real_pos[train_index]
+                    grid = {'gamma': np.logspace(-9, 3, 13), 'nu': np.linspace(0.01, 0.99, 99)}
+                    search = GridSearchCV(algorithm, grid, iid=False, cv=5, return_train_score=False,
+                                          scoring='accuracy')
+                    search.fit(X_train, y_train)
+                    logger.debug("Best parameter (CV score=%0.3f):" % search.best_score_)
+                    logger.debug(search.best_params_)
+                    # train the classifier
+                    # TODO nu should be determined by the context classification results:
+                    #  the percentage of neg flows appeared under pos contexts.
+                    # algorithm.fit(X_train.toarray())
+                    # make the predictions
+                    algorithm = search
+                elif isinstance(algorithm, MeanShift):
+                    algorithm.fit(X_train.toarray())
+                else:
+                    algorithm.fit(X_train)
                 predicted = algorithm.predict(X_test)
                 y_plabs = np.squeeze(predicted)
                 # for i in range(len(real_labels)):
@@ -323,20 +332,56 @@ class Analyzer:
                 results['fold'].append(result)
                 scores.append(f_score)
                 logger.info("F-score: %f Precision: %f Recall: %f", f_score, precision, recall)
-                # train the classifier
-                # algorithm.fit(X_train.toarray(), y_train_true)
-                # # make the predictions
-                # predicted = algorithm.predict(X_test)
-                # y_plabs = np.squeeze(predicted)
-                # accuracy, precision, recall, f_score = Analyzer.metrics(y_plabs, y_test, label_type=-1)
-                # logger.info("True Accuracy: %f", accuracy)
-                # logger.info("True F-score: %f Precision: %f Recall: %f", f_score, precision, recall)
-                # true_scores.append(f_score)
         results['mean_scores'] = np.mean(scores)
         results['std_scores'] = np.std(scores)
         logger.info('mean score: %f', results['mean_scores'])
         logger.info('true mean score: %f', np.mean(true_scores))
         return results
+
+    @staticmethod
+    def url_clustering(pos_flows: [{}]):
+        pattern_maker = PatternMaker()
+        c = 0
+        for flow in pos_flows:
+            url = str(flow['url'])
+            if url.endswith('&'):
+                url = url[:-1]
+            u = urlparse(url)
+            query = parse_qs(u.query)
+            for q in query:
+                query[q] = '.*'
+            u = u._replace(query=urlencode(query, True))
+            u = urlunparse(u)
+            try:
+                pattern_maker.load(u)
+                c += 1
+            except Exception as e:
+                logger.warning('%s: %s', str(e), u)
+        patterns = []
+        for url_meta, clustered in pattern_maker.make():
+            for pattern in pformat('pattern', url_meta, clustered):
+                if pattern is not None and pattern != '/':
+                    logger.info(pattern)
+                    patterns.append(pattern)
+        logger.info('The number of patterns %d, from %d flows', len(patterns), c)
+        return patterns
+
+    @staticmethod
+    def url_pattern2set(pattern: str):
+        assert isinstance(pattern, str)
+        url = pattern.replace('[', '').replace(']', '').replace('\\', '')
+        u = urlparse(url)
+        query = parse_qs(u.query)
+        a = set()
+        for q in query:
+            a.add(q)
+            logger.debug(q)
+
+        for p in u.path.replace('.', '/').replace('-', '').split('/'):
+            if p is not '':
+                a.add(p)
+                logger.debug(p)
+        return a
 
 
 def flows2jsons(negative_pcap_dir, label, json_ext, visited_pcap, fn_filter='filter', has_sub_dir=False):
