@@ -1,16 +1,11 @@
 import re
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn import tree
-from sklearn.naive_bayes import BernoulliNB
-import pydotplus
 from statistics import *
 import pickle
 from sklearn.metrics import accuracy_score
 from sklearn import svm
 import numpy as np
-from sklearn.linear_model import LogisticRegression
 from time import time
 from sklearn import metrics
 from sklearn.model_selection import StratifiedKFold
@@ -24,8 +19,9 @@ from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import chi2
 from sklearn.pipeline import Pipeline
 from nltk.stem.porter import PorterStemmer
+from matplotlib import pyplot as plt
+from scipy.cluster.hierarchy import dendrogram
 import jieba
-
 import os
 
 os.environ["PATH"] += os.pathsep + 'C:/Program Files (x86)/Graphviz2.38/bin/'
@@ -183,45 +179,6 @@ class Learner:
         return train_data, labels
 
     @staticmethod
-    def ocsvm(train_data, labels, n_fold=0):
-        nu = float(np.count_nonzero(labels == -1)) / len(labels)
-        clf = svm.OneClassSVM(nu=nu, kernel="rbf", gamma=0.1)
-        results = None
-        if n_fold != 0:
-            folds = Learner.n_folds(train_data, labels, fold=n_fold)
-            results = Learner.cross_validation(clf, train_data, labels, folds=folds)
-            # simplejson.dump(results.tolist(), codecs.open(output_dir + '/cv.json', 'w', encoding='utf-8'),
-            # separators=(',', ':'), sort_keys=True, indent=4)
-            logger.info('OCSVM: ' + str(results['duration']))
-            logger.info('mean scores:' + str(results['mean_scores']))
-            logger.info('mean_conf:' + str(results['mean_conf_mat']))
-
-        clf.fit(train_data)
-
-        return clf, results
-
-    @staticmethod
-    def train_bayes(train_data, labels, n_fold=0):
-        clf = BernoulliNB()
-        results = None
-        if n_fold != 0:
-            folds = Learner.n_folds(train_data, labels, fold=n_fold)
-            results = Learner.cross_validation(clf, train_data, labels, folds=folds)
-            # simplejson.dump(results.tolist(), codecs.open(output_dir + '/cv.json', 'w', encoding='utf-8'),
-            # separators=(',', ':'), sort_keys=True, indent=4)
-            logger.info('Bayes: ' + str(results['duration']))
-            logger.info('mean scores:' + str(results['mean_scores']))
-            logger.info('mean_conf:' + str(results['mean_conf_mat']))
-
-        # Fit the forest to the training set, using the bag of words as
-        # features and the sentiment labels as the response variable
-        #
-        # This may take a few minutes to run
-        clf = clf.fit(train_data, labels)
-
-        return clf, results
-
-    @staticmethod
     def class_report(conf_mat):
         tp, fp, fn, tn = conf_mat.flatten()
         return Learner.measure(tp, fp, tn, fn)
@@ -337,79 +294,6 @@ class Learner:
         logger.info('mean scores:' + str(results['mean_scores']))
         logger.info('mean_conf:' + str(results['mean_conf_mat']))
         return results
-
-    @staticmethod
-    def train_svm(train_data, labels, n_fold=5):
-        clf = svm.SVC(class_weight='balanced', probability=True)
-        results = None
-        if n_fold != 0:
-            folds = Learner.n_folds(train_data, labels, fold=n_fold)
-            results = Learner.cross_validation(clf, train_data, labels, folds=folds)
-            # simplejson.dump(results.tolist(), codecs.open(output_dir + '/cv.json', 'w', encoding='utf-8'),
-            # separators=(',', ':'), sort_keys=True, indent=4)
-            logger.info('SVM: ' + str(results['duration']))
-            logger.info('mean scores:' + str(results['mean_scores']))
-            logger.info('mean_conf:' + str(results['mean_conf_mat']))
-
-        # Fit the forest to the training set, using the bag of words as
-        # features and the sentiment labels as the response variable
-        #
-        # This may take a few minutes to run
-        clf = clf.fit(train_data, labels)
-
-        return clf, results
-
-    @staticmethod
-    def train_logistic(train_data, labels, n_fold=5):
-        clf = LogisticRegression(class_weight='balanced')
-        results = None
-        if n_fold != 0:
-            folds = Learner.n_folds(train_data, labels, fold=n_fold)
-            results = Learner.cross_validation(clf, train_data, labels, folds=folds)
-            # simplejson.dump(results.tolist(), codecs.open(output_dir + '/cv.json', 'w', encoding='utf-8'),
-            # separators=(',', ':'), sort_keys=True, indent=4)
-            logger.info('Logistic: %s', str(results['duration']))
-            logger.info('mean scores: %s', str(results['mean_scores']))
-            logger.info('mean_conf:%s ', str(results['mean_conf_mat']))
-
-        # Fit the forest to the training set, using the bag of words as
-        # features and the sentiment labels as the response variable
-        #
-        # This may take a few minutes to run
-        clf = clf.fit(train_data, labels)
-        return clf, results
-
-    @staticmethod
-    def train_tree(train_data, labels, n_fold=5, res=None, output_dir=None, tree_name='tree'):
-        clf = DecisionTreeClassifier(class_weight='balanced')
-        results = None
-        if n_fold != 0:
-            print(n_fold)
-            folds = Learner.n_folds(train_data, labels, fold=n_fold)
-            results = Learner.cross_validation(clf, train_data, labels, folds=folds)
-            # simplejson.dump(results.tolist(), codecs.open(output_dir + '/cv.json', 'w', encoding='utf-8'),
-            # separators=(',', ':'), sort_keys=True, indent=4)
-            logger.info('Tree: %.2f', results['duration'])
-            logger.info('mean scores: %.2f', results['mean_scores'])
-            logger.info('mean_conf: %.2f', results['mean_conf_mat'])
-
-        # Fit the forest to the training set, using the bag of words as
-        # features and the sentiment labels as the response variable
-        #
-        # This may take a few minutes to run
-        clf = clf.fit(train_data, labels)
-        if output_dir is not None:
-            tree.export_graphviz(clf, out_file=output_dir + '/' + tree_name + '.dot',
-                                 # feature_names=feature_names,
-                                 label='root', impurity=False, special_characters=True)  # , max_depth=5)
-            dot_file = open(output_dir + '/' + tree_name + '.dot', 'r')
-            graph = pydotplus.graph_from_dot_data(dot_file.read())
-            graph.write_pdf(output_dir + '/' + tree_name + '.pdf')
-            dot_file.close()
-
-        if res is not None:
-            res['tree'] = results
-        return clf, results
 
     @staticmethod
     def train_classifier(func, X, y, cv, result_dict, tag):
@@ -673,6 +557,40 @@ class Learner:
         results['voting']['conf_mat'] = Learner.measure(len(tp_v), len(fp_v), len(tn_v), len(fn_v))
         logger.info('voting conf_mat: %s', str(results['voting']['conf_mat']))
         return results
+
+    @staticmethod
+    def fancy_dendrogram(*args, **kwargs):
+        """
+        From https://haojunsui.github.io/2016/07/16/scipy-hac/
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        plt.figure(figsize=(50, 10))
+        plt.title('Hierarchical Clustering Dendrogram')
+        plt.xlabel('sample index')
+        plt.ylabel('distance')
+        max_d = kwargs.pop('max_d', None)
+        if max_d and 'color_threshold' not in kwargs:
+            kwargs['color_threshold'] = max_d
+        annotate_above = kwargs.pop('annotate_above', 0)
+        ddata = dendrogram(*args, **kwargs)
+
+        if not kwargs.get('no_plot', False):
+            plt.title('Hierarchical Clustering Dendrogram (truncated)')
+            plt.xlabel('sample index or (cluster size)')
+            plt.ylabel('distance')
+            for i, d, c in zip(ddata['icoord'], ddata['dcoord'], ddata['color_list']):
+                x = 0.5 * sum(i[1:3])
+                y = d[1]
+                if y > annotate_above:
+                    plt.plot(x, y, 'o', c=c)
+                    plt.annotate("%.3g" % y, (x, y), xytext=(0, -5), textcoords='offset points', va='top', ha='center')
+            if max_d:
+                plt.axhline(y=max_d, c='k')
+        plt.show()
+        plt.savefig('dend.png')
+        return ddata
 
 
 if __name__ == '__main__':

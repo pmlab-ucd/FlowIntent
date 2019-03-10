@@ -9,17 +9,18 @@ import json
 from argparse import ArgumentParser
 from sklearn.linear_model import LogisticRegression
 from sklearn import svm
-from sklearn.covariance import EllipticEnvelope
-from sklearn.ensemble import IsolationForest
-from sklearn.neighbors import LocalOutlierFactor
+import scipy.spatial.distance as ssd
+from scipy import sparse
+from scipy.cluster.hierarchy import dendrogram, linkage
 from sklearn.model_selection import GridSearchCV
 import pickle
-from urllib.parse import urlparse
+from statistics import jaccard
 import re
 from sklearn.cluster import MeanShift
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 from os_urlpattern.formatter import pformat
 from os_urlpattern.pattern_maker import PatternMaker
+from scipy.cluster.hierarchy import fcluster
 
 logger = set_logger('Analyzer', 'INFO')
 
@@ -361,7 +362,7 @@ class Analyzer:
         for url_meta, clustered in pattern_maker.make():
             for pattern in pformat('pattern', url_meta, clustered):
                 if pattern is not None and pattern != '/':
-                    logger.info(pattern)
+                    logger.debug(pattern)
                     patterns.append(pattern)
         logger.info('The number of patterns %d, from %d flows', len(patterns), c)
         return patterns
@@ -376,12 +377,46 @@ class Analyzer:
         for q in query:
             a.add(q)
             logger.debug(q)
-
         for p in u.path.replace('.', '/').replace('-', '').split('/'):
             if p is not '':
                 a.add(p)
                 logger.debug(p)
         return a
+
+    @staticmethod
+    def url_pattern_dist(a: str, b: str):
+        """
+        URL pattern distance.
+        :param a: a url signature
+        :param b: another url signature
+        :return: the distance value
+        """
+        return 1 - jaccard(Analyzer.url_pattern2set(a), Analyzer.url_pattern2set(b))
+
+    @staticmethod
+    def signature_dendrogram(flows: [{}]):
+        pc = Analyzer.url_clustering(flows)
+        pc = sorted(pc)
+        dm = np.asarray([[Analyzer.url_pattern_dist(p1, p2) for p2 in pc] for p1 in pc])
+        dm = sparse.csr_matrix(dm)
+        dm = ssd.squareform(dm.todense())
+        Z = linkage(dm)
+        Learner.fancy_dendrogram(Z, leaf_rotation=90., leaf_font_size=8)
+        for i in range(len(pc)):
+            logger.info('Signature %d: %s', i, pc[i])
+        return Z, pc
+
+    @staticmethod
+    def flow_cluster(flows: [{}], max_d: float):
+        Z, pc = Analyzer.signature_dendrogram(flows)
+        clusters = fcluster(Z, max_d, criterion='distance')
+        i = 0
+        for c in clusters:
+            # Notice that the value of c has noting to do the original signature index.
+            logger.info('%d %d %s', i, c - 1, pc[i])
+            i += 1
+        logger.info(clusters)
+        logger.info('The number of clusters: %d', max(clusters))
 
 
 def flows2jsons(negative_pcap_dir, label, json_ext, visited_pcap, fn_filter='filter', has_sub_dir=False):
@@ -466,6 +501,8 @@ if __name__ == '__main__':
                         help="the file name of the saved stuff")
     parser.add_argument("-a", "--all", dest="all_feature", action='store_true',
                         help="use both statistical and lexical features, which needs more memory")
+    parser.add_argument("-c", "--cluster", dest="cluster_max_d", default=0,
+                        help="the max distance threshold for flow clustering")
     args = parser.parse_args()
 
     if args.log != 'INFO':
@@ -476,6 +513,12 @@ if __name__ == '__main__':
     if args.gen_json:
         gen_neg_flow_jsons(neg_pcap_dir, args.proc_num)
     pos_flows, neg_flows = preprocess(neg_pcap_dir, sub_dir_name=args.sub_dir)
+    if args.cluster_max_d != 0:
+        d = float(args.cluster_max_d)
+        logger.info('--------------------Flow Clustering--------------------')
+        logger.info('The max distance threshold %f', d)
+        Analyzer.flow_cluster(pos_flows, d)
+        exit(0)
     text_fea, numeric_fea, y, true_labels = Analyzer.gen_instances(pos_flows, neg_flows, char_wb=False, simulate=False)
     solver = 'newton-cg'  # 'liblinear'
     penalty = 'l2'
