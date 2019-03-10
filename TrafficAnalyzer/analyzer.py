@@ -9,17 +9,18 @@ import json
 from argparse import ArgumentParser
 from sklearn.linear_model import LogisticRegression
 from sklearn import svm
-from sklearn.covariance import EllipticEnvelope
-from sklearn.ensemble import IsolationForest
-from sklearn.neighbors import LocalOutlierFactor
+import scipy.spatial.distance as ssd
+from scipy import sparse
+from scipy.cluster.hierarchy import dendrogram, linkage
 from sklearn.model_selection import GridSearchCV
 import pickle
-from urllib.parse import urlparse
+from statistics import jaccard
 import re
 from sklearn.cluster import MeanShift
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 from os_urlpattern.formatter import pformat
 from os_urlpattern.pattern_maker import PatternMaker
+from matplotlib import pyplot as plt
 
 logger = set_logger('Analyzer', 'INFO')
 
@@ -382,6 +383,34 @@ class Analyzer:
                 a.add(p)
                 logger.debug(p)
         return a
+
+    @staticmethod
+    def url_pattern_dist(a: str, b: str):
+        """
+        URL pattern distance.
+        :param a: a url signature
+        :param b: another url signature
+        :return: the distance value
+        """
+        return 1 - jaccard(Analyzer.url_pattern2set(a), Analyzer.url_pattern2set(b))
+
+    @staticmethod
+    def signature_dendrogram(flows: [{}]):
+        pc = Analyzer.url_clustering(flows)
+        pc = sorted(pc)
+        dm = np.asarray([[Analyzer.url_pattern_dist(p1, p2) for p2 in pc] for p1 in pc])
+        dm = sparse.csr_matrix(dm)
+        dm = ssd.squareform(dm.todense())
+        Z = linkage(dm)
+        plt.figure(figsize=(50, 10))
+        plt.title('Hierarchical Clustering Dendrogram')
+        plt.xlabel('sample index')
+        plt.ylabel('distance')
+        dendrogram(Z, leaf_rotation=90., leaf_font_size=8)
+        plt.show()
+        # plt.savefig('testplot.png')
+        for i in range(len(pc)):
+            print(i, pc[i])
 
 
 def flows2jsons(negative_pcap_dir, label, json_ext, visited_pcap, fn_filter='filter', has_sub_dir=False):
