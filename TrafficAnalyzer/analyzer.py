@@ -426,11 +426,22 @@ class Analyzer:
             s = Analyzer.url_pattern2set(sigs[0])
             for i in range(1, len(sigs)):
                 s = s.intersection(Analyzer.url_pattern2set(sigs[i]))
-            if len(s) > 0:
+            if len(s) > 2:
                 sig_cls.append(s)
                 logger.info(s)
         logger.info('The number of clusters: %d', len(sig_cls))
         return sig_cls
+
+    @staticmethod
+    def fcluster_predict(sigs: [set], flows: [{}]):
+        matched = {}
+        for f in flows:
+            u = Analyzer.url_pattern2set(f['url'])
+            for s in sigs:
+                if len(u.intersection(s)) == len(s):
+                    logger.info('Matched %s: %s', s, f['url'])
+                    matched[f['url']] = s
+        return matched
 
 
 def flows2jsons(negative_pcap_dir, label, json_ext, visited_pcap, fn_filter='filter', has_sub_dir=False):
@@ -531,7 +542,9 @@ if __name__ == '__main__':
         d = float(args.cluster_max_d)
         logger.info('--------------------Flow Clustering--------------------')
         logger.info('The max distance threshold %f', d)
-        Analyzer.flow_cluster(pos_flows, d)
+        sigs = Analyzer.flow_cluster(pos_flows, d)
+        fps = Analyzer.fcluster_predict(sigs, neg_flows)
+        logger.info('The number of false positives: %d', len(fps))
         exit(0)
     text_fea, numeric_fea, y, true_labels = Analyzer.gen_instances(pos_flows, neg_flows, char_wb=False, simulate=False)
     solver = 'newton-cg'  # 'liblinear'
