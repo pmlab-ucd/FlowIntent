@@ -350,7 +350,7 @@ class Analyzer:
             u = urlparse(url)
             query = parse_qs(u.query)
             for q in query:
-                query[q] = '.*'
+                query[q] = ' '
             u = u._replace(query=urlencode(query, True))
             u = urlunparse(u)
             try:
@@ -410,13 +410,27 @@ class Analyzer:
     def flow_cluster(flows: [{}], max_d: float):
         Z, pc = Analyzer.signature_dendrogram(flows)
         clusters = fcluster(Z, max_d, criterion='distance')
+        cls = dict()
         i = 0
         for c in clusters:
             # Notice that the value of c has noting to do the original signature index.
             logger.info('%d %d %s', i, c - 1, pc[i])
+            if c not in cls:
+                cls[c] = []
+            cls[c].append(pc[i])
             i += 1
         logger.info(clusters)
-        logger.info('The number of clusters: %d', max(clusters))
+        sig_cls = []
+        for sigs in cls.values():
+            logger.debug(sigs)
+            s = Analyzer.url_pattern2set(sigs[0])
+            for i in range(1, len(sigs)):
+                s = s.intersection(Analyzer.url_pattern2set(sigs[i]))
+            if len(s) > 0:
+                sig_cls.append(s)
+                logger.info(s)
+        logger.info('The number of clusters: %d', len(sig_cls))
+        return sig_cls
 
 
 def flows2jsons(negative_pcap_dir, label, json_ext, visited_pcap, fn_filter='filter', has_sub_dir=False):
