@@ -16,4 +16,14 @@ TrafficAnalyzer
 1. analyzer.py to analyze the traffic data specified by illegal contexts, or any self-provided flows.
 2. predictor.py to leverage the model trained by analyzer to predict unseen data.  
 
-If you are looking for the paper or the bibtex. Please click [here](https://ieeexplore.ieee.org/abstract/document/7732993/)
+If you are looking for the paper, please click [here](https://ieeexplore.ieee.org/abstract/document/7732993/)
+The bibtex:
+```
+@inproceedings{flowintent,
+  title={FlowIntent: Detecting Privacy Leakage from User Intention to Network Traffic Mapping},
+  author={Fu, Hao and Zheng, Zizhan and Das, Aveek K and Pathak, Parth H and Hu, Pengfei and Mohapatra, Prasant},
+  booktitle={IEEE International Conference on Sensing, Communication, and Networking (SECON)},
+  year={2016}
+}
+```
+The dataset is available [here](https://drive.google.com/file/d/1RVbcSNenhKz_eDPZRv97Q6Ay1FsSvURD/view?usp=sharing)
