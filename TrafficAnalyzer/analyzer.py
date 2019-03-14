@@ -100,11 +100,12 @@ class Analyzer:
         return jsons
 
     @staticmethod
-    def gen_docs(jsons: [{}], char_wb: bool = False) -> [Learner.LabelledDocs]:
+    def gen_docs(jsons: [{}], char_wb: bool = False, add_taint: bool = False) -> [Learner.LabelledDocs]:
         """
         Generate string list from the flow URLs.
         :param jsons: The flow jsons.
         :param char_wb:
+        :param add_taint: Whether add taints as tokens.
         :return:
         """
         docs = []
@@ -113,7 +114,8 @@ class Analyzer:
             line = Analyzer.filter_url_words(flow['url'])
             if '_' in flow['taint']:
                 taint_counts += 1
-            # line = line + ' ' + 'r_' + flow['taint']
+            if add_taint:
+                line = line + ' ' + 't_' + flow['taint']
             label = 1 if flow['label'] == '1' else 0
             real_label = 1 if flow['real_label'] == '1' else 0
             if real_label != label:
@@ -125,7 +127,8 @@ class Analyzer:
         return docs
 
     @staticmethod
-    def gen_instances(positive_flows: list, negative_flows: list, simulate: bool = False, char_wb: bool = False) -> (
+    def gen_instances(positive_flows: list, negative_flows: list, simulate: bool = False, char_wb: bool = False,
+                      add_taint: bool = False) -> (
             list, [[float]], np.array, np.array):
         """
         Generate the instances for ML from the given flows.
@@ -134,12 +137,13 @@ class Analyzer:
         :param negative_flows:
         :param simulate: Whether generate the simulated random flows.
         :param char_wb: Whether add a space before and after each token.
+        :param add_taint: Whether add taints as tokens.
         :return:
         """
         logger.info('lenPos: %d', len(positive_flows))
         logger.info('lenNeg: %d', len(negative_flows))
-        docs = Analyzer.gen_docs(positive_flows, char_wb)
-        docs = docs + (Analyzer.gen_docs(negative_flows, char_wb))
+        docs = Analyzer.gen_docs(positive_flows, char_wb, add_taint=add_taint)
+        docs = docs + (Analyzer.gen_docs(negative_flows, char_wb, add_taint=add_taint))
         if simulate and len(negative_flows) == 0:
             docs = docs + Learner.simulate_flows(len(positive_flows), 0)
         samples = []
@@ -537,6 +541,8 @@ if __name__ == '__main__':
                         help="use both statistical and lexical features, which needs more memory")
     parser.add_argument("-c", "--cluster", dest="cluster_max_d", default=0,
                         help="the max distance threshold for flow clustering")
+    parser.add_argument("-t", "--taint", dest="add_taint", action='store_true',
+                        help="whether add taint info into feature space")
     args = parser.parse_args()
 
     if args.log != 'INFO':
@@ -555,7 +561,8 @@ if __name__ == '__main__':
         fps = Analyzer.fcluster_predict(sigs, neg_flows)
         logger.info('The number of false positives: %d, from %d flows', len(fps), len(neg_flows))
         exit(0)
-    text_fea, numeric_fea, y, true_labels = Analyzer.gen_instances(pos_flows, neg_flows, char_wb=False, simulate=False)
+    text_fea, numeric_fea, y, true_labels = Analyzer.gen_instances(pos_flows, neg_flows, char_wb=False, simulate=False,
+                                                                   add_taint=args.add_taint)
     solver = 'newton-cg'  # 'liblinear'
     penalty = 'l2'
     if not args.numeric:
