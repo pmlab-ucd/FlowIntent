@@ -16,7 +16,7 @@ TrafficAnalyzer
 1. analyzer.py to analyze the traffic data specified by illegal contexts, or any self-provided flows.
 2. predictor.py to leverage the model trained by analyzer to predict unseen data.  
 
-If you are looking for the paper, please click [here](https://ieeexplore.ieee.org/abstract/document/7732993/).
+If you are looking for the conference paper, please click [here](https://ieeexplore.ieee.org/abstract/document/7732993/).
 
 The bibtex:
 ```
