@@ -29,7 +29,8 @@ class Analyzer:
     # We currently do not consider indirect leakage in positive samples.
     # Indirect leakage: first leverage legal map sdk to get position description (such as city name),
     # then transfer the description out.
-    map_sdk_urls = ['map.baidu.com', 'amap.com', 'maps.googleapis.com']
+    map_sdk_urls = ['map.baidu.com', 'amap.com', 'maps.googleapis.com', 'maps.google.com', 'go2map.com',
+                    'weather', 'gismeteo.ru']
     numeric_features = ['frame_num', 'up_count', 'non_http_num', 'len_stat', 'epoch_stat',
                         'up_stat', 'down_stat']
 
@@ -56,7 +57,7 @@ class Analyzer:
         """
         with open(os.path.join(pred_contexts_path, 'contexts.json'), 'r', errors='ignore') as infile:
             contexts = json.load(infile)
-            logger.info(len(contexts))
+            logger.info('The number of contexts: %d', len(contexts))
             pred_pos = []
             with open(os.path.join(pred_contexts_path, 'folds.json'), 'r', errors='ignore') as json_file:
                 folds = json.load(json_file)
@@ -66,7 +67,19 @@ class Analyzer:
             return pred_pos
 
     @staticmethod
-    def sens_flow_jsons(contexts: [{}], filtered_urls: [] = None) -> []:
+    def filter_pos_flows(flow):
+        u = flow['url']
+        if u.endswith('.png') or u.endswith('.jpg') or u.endswith('.gif'):
+            # TaintDroid may generate fp for figure urls.
+            return True
+        if Analyzer.map_sdk_urls is None:
+            return False
+        for url in Analyzer.map_sdk_urls:
+            if url in flow['url']:
+                return True
+
+    @staticmethod
+    def sens_flow_jsons(contexts: [{}], filter_flow) -> []:
         """
         Given contexts, get the corresponding sens_http_flows.json specified in context['dir'] field.
         :param contexts:
@@ -84,18 +97,10 @@ class Analyzer:
                     with open(os.path.join(root, file), 'r', encoding="utf8", errors='ignore') as infile:
                         flows = json.load(infile)
                         for flow in flows:
-                            if filtered_urls is None:
-                                continue
-                            ignore = False
-                            for url in filtered_urls:
-                                if url in flow['url']:
-                                    ignore = True
-                                    break
-                            if ignore:
-                                continue
-                            # The ground truth label, which is defined by "context" label.
-                            flow['real_label'] = context['label']
-                            jsons.append(flow)
+                            if not filter_flow(flow):
+                                # The ground truth label, which is defined by "context" label.
+                                flow['real_label'] = context['label']
+                                jsons.append(flow)
         logger.info('The number of flows: %d', len(jsons))
         return jsons
 
@@ -497,7 +502,7 @@ def preprocess(negative_pcap_dir, sub_dir_name=''):
     contexts_dir = os.path.join("../AppInspector/data/", sub_dir_name)
     logger.info('The contexts are stored at %s', os.path.abspath(contexts_dir))
     contexts = Analyzer.pred_pos_contexts(contexts_dir)
-    positive_flows = Analyzer.sens_flow_jsons(contexts, Analyzer.map_sdk_urls)
+    positive_flows = Analyzer.sens_flow_jsons(contexts, Analyzer.filter_pos_flows)
     for flow in positive_flows:
         # The label given by the prediction of AppInspector, may not be as same as the ground truth.
         flow['label'] = '1'
